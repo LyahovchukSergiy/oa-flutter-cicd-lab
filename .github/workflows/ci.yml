@@ -55,7 +55,7 @@ jobs:
         run: flutter test --coverage
 
       - name: Звіт покриття
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: coverage/lcov.info
