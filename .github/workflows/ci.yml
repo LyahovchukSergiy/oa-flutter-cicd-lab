@@ -1,0 +1,62 @@
+# Гейт. Єдина умова злиття: усе, що нижче, має бути зеленим.
+#
+# Один job, а не три. Кожен job це окрема віртуальна машина, яка з нуля
+# робить checkout, ставить Flutter і тягне залежності. На проєкті такого
+# розміру ця підготовка коштує більше, ніж самі перевірки, тому ділити
+# їх на джоби має сенс лише тоді, коли вони справді йдуть паралельно.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# За замовчуванням GITHUB_TOKEN отримує більше прав, ніж потрібно.
+# Гейт нічого не пише, тому дозволяємо тільки читання.
+permissions:
+  contents: read
+
+# Новий пуш у гілку скасовує попередній прогін тієї ж гілки.
+# Дрібниця, яка економить помітну частку хвилин.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Формат, аналіз, тести
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          # Версія береться з pubspec.yaml. Одне джерело правди
+          # для ноутбука і для ранера.
+          flutter-version-file: pubspec.yaml
+          cache: true
+
+      # Друкуємо версію в лог навмисно: коли через пів року прогін
+      # упаде, перше питання буде саме про неї.
+      - run: flutter --version
+
+      - run: flutter pub get
+
+      - name: Формат
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Аналіз
+        run: flutter analyze --fatal-infos
+
+      - name: Тести
+        run: flutter test --coverage
+
+      - name: Звіт покриття
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage
+          path: coverage/lcov.info
+          retention-days: 7

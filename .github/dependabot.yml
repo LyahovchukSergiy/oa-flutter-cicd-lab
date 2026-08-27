@@ -1,0 +1,14 @@
+# Дві екосистеми, і друга важливіша за першу.
+# Дії протухають самі: у вересні 2026 з ранерів прибирають Node 20,
+# і кожна дія, застрягла на старому мажорі, перестане запускатися.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: pub
+    directory: /
+    schedule:
+      interval: weekly

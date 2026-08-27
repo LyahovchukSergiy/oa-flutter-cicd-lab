@@ -1,0 +1,4 @@
+{
+  "BUILD_ENV": "local",
+  "BOARD_TOKEN": "local-token-not-a-secret"
+}

@@ -1,0 +1,90 @@
+# Реліз. Запускається тегом виду v1.0.3 і робить рівно одне:
+# перетворює коміт на підписаний APK, який можна поставити на телефон.
+#
+# Артефакт прогону живе 90 днів, файл у Release не протухає ніколи.
+# Тому доказ кладеться в обидва місця.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write # потрібно, щоб створити Release
+
+jobs:
+  android:
+    name: Підписаний APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version-file: pubspec.yaml
+          cache: true
+
+      - run: flutter pub get
+
+      # Секрет не потрапляє ані в аргументи команди, ані в echo.
+      # jq збирає файл із змінної середовища, і значення ніде не друкується.
+      - name: Значення збірки
+        env:
+          BOARD_TOKEN: ${{ secrets.BOARD_TOKEN }}
+        run: |
+          jq -n --arg env prod --arg token "$BOARD_TOKEN" \
+            '{BUILD_ENV: $env, BOARD_TOKEN: $token}' > define.json
+
+      # Keystore лежить у секреті як base64. Розкладаємо його у файл
+      # і одразу перевіряємо, що це справді keystore, а не порожній файл:
+      # інакше збірка мовчки підпишеться налагоджувальним ключем.
+      - name: Ключ підпису
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/oa-demo.jks
+          test -s android/oa-demo.jks || { echo "keystore порожній"; exit 1; }
+          cat > android/key.properties <<PROPS
+          storeFile=oa-demo.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEYSTORE_PASSWORD
+          PROPS
+
+      - name: Збірка
+        run: flutter build apk --release --dart-define-from-file=define.json
+
+      # Доказ, а не обіцянка: у логу видно, яким саме сертифікатом
+      # підписано те, що поїде користувачу.
+      - name: Хто підписав
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs \
+            build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Прибрати ключ і значення
+        if: always()
+        run: rm -f android/oa-demo.jks android/key.properties define.json
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: app-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/app/outputs/flutter-apk/app-release.apk
+          generate_release_notes: true
