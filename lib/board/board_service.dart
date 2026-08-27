@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'flight.dart';
 
 /// Правила табло вильотів.
@@ -17,7 +19,7 @@ class BoardService {
   /// Скільки скасований рейс висить на табло.
   static const Duration afterCancellation = Duration(hours: 1);
 
-  FlightStatus statusOf(Flight flight, DateTime now) {
+  FlightStatus statusOf(Flight flight,DateTime now){
     if (flight.cancelled) return FlightStatus.cancelled;
     if (!now.isBefore(flight.expected)) return FlightStatus.departed;
     if (flight.expected.difference(now) <= boardingWindow) {
